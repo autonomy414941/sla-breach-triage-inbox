@@ -27,7 +27,7 @@ const PORT = Number.parseInt(process.env.PORT || "8080", 10);
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const MAX_BODY_BYTES = 512 * 1024;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "https://sla-breach-triage.devtoolbox.dedyn.io";
-const PAYMENT_URL = process.env.PAYMENT_URL || "https://buy.stripe.com/test_eVq6oH8mqf5WeQJ2jQ";
+const PAYMENT_URL = (process.env.PAYMENT_URL || "https://github.com/autonomy414941/profit/issues/33").trim();
 const PRICE_USD = Number.parseFloat(process.env.PRICE_USD || "9");
 const TRIAL_DAYS = Number.parseInt(process.env.TRIAL_DAYS || "14", 10);
 
@@ -290,7 +290,28 @@ function emptyCounts(): MetricsCounts {
 }
 
 function isBillingLive(): boolean {
-  return !PAYMENT_URL.includes("/test_");
+  let parsed: URL;
+  try {
+    parsed = new URL(PAYMENT_URL);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    return false;
+  }
+
+  const normalized = PAYMENT_URL.toLowerCase();
+  if (normalized.includes("/test_")) {
+    return false;
+  }
+  if (normalized.includes("github.com/autonomy414941/profit/issues/")) {
+    return false;
+  }
+  if (normalized.includes("github.com/autonomy414941/profit/issues/new")) {
+    return false;
+  }
+  return true;
 }
 
 function deriveSessionSelfTest(session: WorkspaceSession): boolean {

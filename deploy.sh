@@ -9,7 +9,9 @@ PERSIST_DIR="$ROOT_DIR/../../data/sla-breach-triage-inbox"
 ANTHROPIC_KEY_FILE="${ANTHROPIC_KEY_FILE:-$HOME/.secrets/anthropic}"
 OPENAI_KEY_FILE="${OPENAI_KEY_FILE:-$HOME/.secrets/openai}"
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://sla-breach-triage.devtoolbox.dedyn.io}"
-PAYMENT_URL="${PAYMENT_URL:-https://buy.stripe.com/test_eVq6oH8mqf5WeQJ2jQ}"
+PAYMENT_LINK_JSON="${PAYMENT_LINK_JSON:-$ROOT_DIR/../../portal/site/payment-link.json}"
+PAYMENT_URL="${PAYMENT_URL:-}"
+PAYMENT_URL_FALLBACK="${PAYMENT_URL_FALLBACK:-https://github.com/autonomy414941/profit/issues/33}"
 PRICE_USD="${PRICE_USD:-9}"
 
 read_key_file() {
@@ -43,6 +45,22 @@ read_key_file() {
   printf '%s' "$line"
 }
 
+read_payment_url_from_json() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then
+    return 1
+  fi
+
+  local url
+  url="$(jq -r '.paymentUrl // ""' "$file" 2>/dev/null || true)"
+  url="$(printf '%s' "$url" | tr -d '\r\n')"
+  if [[ -z "$url" ]]; then
+    return 1
+  fi
+
+  printf '%s' "$url"
+}
+
 if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
   ANTHROPIC_API_KEY="$(read_key_file "$ANTHROPIC_KEY_FILE" || true)"
 fi
@@ -51,18 +69,29 @@ if [[ -z "${OPENAI_API_KEY:-}" ]]; then
   OPENAI_API_KEY="$(read_key_file "$OPENAI_KEY_FILE" || true)"
 fi
 
+if [[ -z "$PAYMENT_URL" ]]; then
+  PAYMENT_URL="$(read_payment_url_from_json "$PAYMENT_LINK_JSON" || true)"
+fi
+if [[ -z "$PAYMENT_URL" ]]; then
+  PAYMENT_URL="$PAYMENT_URL_FALLBACK"
+fi
+
 if [[ -z "${ANTHROPIC_API_KEY:-}" && -z "${OPENAI_API_KEY:-}" ]]; then
   echo "missing LLM key: set ANTHROPIC_API_KEY or OPENAI_API_KEY (or store one in ~/.secrets/anthropic or ~/.secrets/openai)" >&2
   exit 1
 fi
 
-if [[ "$PAYMENT_URL" != https://buy.stripe.com/* ]]; then
-  echo "PAYMENT_URL must be a Stripe checkout link (https://buy.stripe.com/...)" >&2
+if ! [[ "$PAYMENT_URL" =~ ^https?:// ]]; then
+  echo "PAYMENT_URL must be an absolute http(s) URL." >&2
   exit 1
 fi
 
 if [[ "$PAYMENT_URL" == *"/test_"* ]]; then
-  echo "warning: PAYMENT_URL is Stripe test mode. Keep status as building until live payment link is configured." >&2
+  echo "warning: PAYMENT_URL appears to be test mode. Keep status as building until live billing is configured." >&2
+fi
+
+if [[ "$PAYMENT_URL" == https://github.com/autonomy414941/profit/issues/* ]] || [[ "$PAYMENT_URL" == https://github.com/autonomy414941/profit/issues/new* ]]; then
+  echo "warning: PAYMENT_URL points to a setup issue, so billing will remain not-live." >&2
 fi
 
 cd "$ROOT_DIR"
