@@ -2,7 +2,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ACTION_VERSION = "0.1.1";
+const ACTION_VERSION = "0.1.2";
 const PRIORITY_ORDER = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const ACTION_DIR = path.dirname(fileURLToPath(import.meta.url));
 const BUNDLED_SAMPLE_CSV = path.join(ACTION_DIR, "zendesk-sample.csv");
@@ -52,6 +52,38 @@ function normalizeBaseUrl(value) {
     throw new Error("invalid_api_base_url");
   }
   return normalized.replace(/\/+$/, "");
+}
+
+function sanitizeWorkspaceKey(value) {
+  const normalized = oneLine(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9_.:-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  if (!normalized || normalized.length < 6) {
+    return "";
+  }
+  return normalized;
+}
+
+function buildDefaultWorkspaceKey(teamName, primaryQueue) {
+  const repository = sanitizeWorkspaceKey(String(process.env.GITHUB_REPOSITORY || "").replace(/\//g, "-"));
+  if (repository) {
+    return sanitizeWorkspaceKey(`gh-${repository}`) || "gh-support-ops-default";
+  }
+
+  const teamPart = sanitizeWorkspaceKey(teamName) || "support-ops-team";
+  const queuePart = sanitizeWorkspaceKey(primaryQueue) || "billing-escalations";
+  return sanitizeWorkspaceKey(`team-${teamPart}-${queuePart}`) || "team-support-ops-billing-escalations";
+}
+
+function resolveWorkspaceKey(inputValue, teamName, primaryQueue) {
+  const explicit = sanitizeWorkspaceKey(inputValue);
+  if (explicit) {
+    return explicit;
+  }
+  return buildDefaultWorkspaceKey(teamName, primaryQueue);
 }
 
 function oneLine(value) {
@@ -155,9 +187,25 @@ function buildSummary(result, metadata) {
     `- Escalations recommended: ${escalationCount}`,
     `- API base URL: ${metadata.apiBaseUrl}`,
     `- Source: ${metadata.source}`,
+    `- Workspace key: ${metadata.workspaceKey}`,
     `- CSV source: ${metadata.csvSource}`,
     ""
   ];
+
+  if (result.sessionId) {
+    lines.push(`- Session ID: ${oneLine(result.sessionId)}`);
+  }
+  if (result.workspaceAutoCreated === true) {
+    lines.push("- Workspace lifecycle: created");
+  } else if (result.workspaceAutoCreated === false && result.sessionId) {
+    lines.push("- Workspace lifecycle: resumed");
+  }
+  if (result.workspaceCheckoutUrl) {
+    lines.push(`- Resume URL: ${oneLine(result.workspaceCheckoutUrl)}`);
+  }
+  if (result.sessionId || result.workspaceCheckoutUrl) {
+    lines.push("");
+  }
 
   if (Array.isArray(result.immediateActions) && result.immediateActions.length) {
     lines.push("### Immediate Actions");
@@ -202,7 +250,10 @@ function extractResultBody(rawBody) {
     immediateActions: Array.isArray(rawBody.immediateActions) ? rawBody.immediateActions : [],
     tickets,
     importSummary: rawBody.importSummary && typeof rawBody.importSummary === "object" ? rawBody.importSummary : null,
-    recommendedTicket: rawBody.recommendedTicket && typeof rawBody.recommendedTicket === "object" ? rawBody.recommendedTicket : null
+    recommendedTicket: rawBody.recommendedTicket && typeof rawBody.recommendedTicket === "object" ? rawBody.recommendedTicket : null,
+    sessionId: typeof rawBody.sessionId === "string" ? rawBody.sessionId : "",
+    workspaceAutoCreated: typeof rawBody.workspaceAutoCreated === "boolean" ? rawBody.workspaceAutoCreated : null,
+    workspaceCheckoutUrl: typeof rawBody.workspaceCheckoutUrl === "string" ? rawBody.workspaceCheckoutUrl : ""
   };
 }
 
@@ -214,11 +265,15 @@ async function main() {
   const selfTest = parseBooleanInput(getInput("self_test", "false"), false);
   const failOnP0 = parseBooleanInput(getInput("fail_on_p0", "true"), true);
   const maxTickets = parseIntegerInput("max_tickets", getInput("max_tickets", "4"), 1, 8);
+  const teamName = getInput("team_name", "Support Ops Team");
+  const helpdeskPlatform = getInput("helpdesk_platform", "Zendesk");
+  const primaryQueue = getInput("primary_queue", "billing-escalations");
+  const workspaceKey = resolveWorkspaceKey(getInput("workspace_key"), teamName, primaryQueue);
 
   const payload = {
-    teamName: getInput("team_name", "Support Ops Team"),
-    helpdeskPlatform: getInput("helpdesk_platform", "Zendesk"),
-    primaryQueue: getInput("primary_queue", "billing-escalations"),
+    teamName,
+    helpdeskPlatform,
+    primaryQueue,
     slaTargetMinutes: parseIntegerInput("sla_target_minutes", getInput("sla_target_minutes", "45"), 5, 240),
     monthlyTicketVolume: parseIntegerInput(
       "monthly_ticket_volume",
@@ -237,6 +292,7 @@ async function main() {
       "Enterprise and contract-backed SLA accounts"
     ),
     maxTickets,
+    workspaceKey,
     source,
     selfTest
   };
@@ -269,7 +325,7 @@ async function main() {
   }
 
   const result = extractResultBody(rawBody);
-  const markdown = buildSummary(result, { apiBaseUrl, source, csvSource: csvInput.csvSource });
+  const markdown = buildSummary(result, { apiBaseUrl, source, workspaceKey, csvSource: csvInput.csvSource });
   const reportPath = getInput("output_markdown_path");
 
   if (reportPath) {
@@ -287,6 +343,8 @@ async function main() {
   await setOutput("recommended_ticket_id", recommendedTicketId);
   await setOutput("recommended_owner", recommendedOwner);
   await setOutput("csv_source", csvInput.csvSource);
+  await setOutput("session_id", result.sessionId || "");
+  await setOutput("workspace_key", workspaceKey);
 
   if (failOnP0 && highest === "P0") {
     process.exitCode = 1;

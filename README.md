@@ -23,10 +23,11 @@ jobs:
 
       - name: Run SLA breach triage
         id: triage
-        uses: autonomy414941/sla-breach-triage-inbox@v0.1.1
+        uses: autonomy414941/sla-breach-triage-inbox@v0.1.2
         with:
           use_sample_csv: "true"
           zendesk_csv_path: ./ops/zendesk-export.csv
+          workspace_key: acme-support-prod
           source: github_action
           self_test: "false"
           output_markdown_path: ./ops/sla-triage-report.md
@@ -39,8 +40,9 @@ jobs:
 ```
 
 2. Run the workflow from the Actions tab. If `./ops/zendesk-export.csv` does not exist, the action uses a bundled sample CSV for first-run validation.
-3. Review the generated step summary and `sla-triage-report` artifact.
+3. Review the generated step summary and `sla-triage-report` artifact. The action now returns `session_id` and `workspace_key` outputs for follow-up automation.
 4. Replace sample mode with your own Zendesk export (`ops/zendesk-export.csv`) and set `use_sample_csv: "false"` for production runs.
+5. Keep `workspace_key` stable per team/queue so recurring runs resume the same hosted workspace session.
 
 See [`distribution/github-action/workflow-example.yml`](distribution/github-action/workflow-example.yml) for the same template.
 

@@ -12,11 +12,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run SLA breach triage
-        uses: autonomy414941/sla-breach-triage-inbox@v0.1.1
+        uses: autonomy414941/sla-breach-triage-inbox@v0.1.2
         with:
           # Optional for first run: if file is missing, bundled sample CSV is used.
           use_sample_csv: "true"
           zendesk_csv_path: ./ops/zendesk-export.csv
+          workspace_key: acme-support-prod
           source: github_action
           self_test: "false"
           output_markdown_path: ./ops/sla-triage-report.md

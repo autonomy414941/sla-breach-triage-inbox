@@ -100,6 +100,7 @@ type EventRecord = {
 type State = {
   sessions: Record<string, WorkspaceSession>;
   events: EventRecord[];
+  workspaceKeys: Record<string, string>;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -124,7 +125,8 @@ const EVENT_TYPES: EventType[] = [
 
 const state: State = {
   sessions: {},
-  events: []
+  events: [],
+  workspaceKeys: {}
 };
 
 let stateWriteQueue: Promise<void> = Promise.resolve();
@@ -241,6 +243,25 @@ function parseOptionalSessionId(payload: JsonObject): string | null {
     throw new Error("invalid_sessionId");
   }
   return sessionId;
+}
+
+function parseOptionalWorkspaceKey(payload: JsonObject): string | null {
+  const workspaceKey = asOptionalString(payload, "workspaceKey", 120);
+  if (!workspaceKey) {
+    return null;
+  }
+
+  const normalized = workspaceKey
+    .toLowerCase()
+    .replace(/[^a-z0-9_.:-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  if (!/^[a-z0-9][a-z0-9_.:-]{5,119}$/.test(normalized)) {
+    throw new Error("invalid_workspaceKey");
+  }
+
+  return normalized;
 }
 
 function normalizeOnboardingAction(action: string): string {
@@ -671,6 +692,55 @@ async function createWorkspaceSession(input: SlaWorkspaceInput, source: string, 
   return session;
 }
 
+async function resolveWorkspaceFromRequest(options: {
+  workspaceInput: SlaWorkspaceInput;
+  requestedSessionId: string | null;
+  workspaceKey: string | null;
+  source: string;
+  selfTest: boolean;
+}): Promise<{ sessionId: string | null; workspaceCreated: boolean }> {
+  const { workspaceInput, requestedSessionId, workspaceKey, source, selfTest } = options;
+  if (requestedSessionId) {
+    if (!state.sessions[requestedSessionId]) {
+      throw new Error("session_not_found");
+    }
+
+    if (workspaceKey && state.workspaceKeys[workspaceKey] !== requestedSessionId) {
+      state.workspaceKeys[workspaceKey] = requestedSessionId;
+      await saveState();
+    }
+
+    return {
+      sessionId: requestedSessionId,
+      workspaceCreated: false
+    };
+  }
+
+  if (!workspaceKey) {
+    return {
+      sessionId: null,
+      workspaceCreated: false
+    };
+  }
+
+  const mappedSessionId = state.workspaceKeys[workspaceKey];
+  if (mappedSessionId && state.sessions[mappedSessionId]) {
+    return {
+      sessionId: mappedSessionId,
+      workspaceCreated: false
+    };
+  }
+
+  const session = await createWorkspaceSession(workspaceInput, source, selfTest);
+  state.workspaceKeys[workspaceKey] = session.sessionId;
+  await saveState();
+
+  return {
+    sessionId: session.sessionId,
+    workspaceCreated: true
+  };
+}
+
 async function createTriageDecision(
   session: WorkspaceSession,
   ticket: TicketTriageInput,
@@ -905,6 +975,21 @@ async function loadState(): Promise<void> {
         }
       }
     }
+    if (parsed.workspaceKeys && typeof parsed.workspaceKeys === "object") {
+      const nextWorkspaceKeys: Record<string, string> = {};
+      for (const [workspaceKey, sessionId] of Object.entries(parsed.workspaceKeys)) {
+        if (typeof sessionId !== "string") {
+          continue;
+        }
+        if (
+          /^[a-z0-9][a-z0-9_.:-]{5,119}$/.test(workspaceKey) &&
+          /^[a-zA-Z0-9-]{8,120}$/.test(sessionId)
+        ) {
+          nextWorkspaceKeys[workspaceKey] = sessionId;
+        }
+      }
+      state.workspaceKeys = nextWorkspaceKeys;
+    }
     if (Array.isArray(parsed.events)) {
       state.events = parsed.events.filter((event): event is EventRecord => {
         return Boolean(event && typeof event === "object" && EVENT_TYPES.includes((event as EventRecord).eventType));
@@ -1078,10 +1163,16 @@ const server = http.createServer(async (request, response) => {
       const payload = await parseBody(request);
       const { workspaceInput, csvData, maxTickets } = buildDailyCommandCsvImportRequest(payload);
       const { source, selfTest } = requestTrafficContext(request, payload, "web", false);
-      const sessionId = parseOptionalSessionId(payload);
-      if (sessionId && !state.sessions[sessionId]) {
-        throw new Error("session_not_found");
-      }
+      const requestedSessionId = parseOptionalSessionId(payload);
+      const workspaceKey = parseOptionalWorkspaceKey(payload);
+      const sessionResolution = await resolveWorkspaceFromRequest({
+        workspaceInput,
+        requestedSessionId,
+        workspaceKey,
+        source,
+        selfTest
+      });
+      const sessionId = sessionResolution.sessionId;
 
       const importResult = buildQueueSnapshotFromZendeskCsv(csvData, maxTickets);
       const command = await buildDailyCommand(workspaceInput, importResult.queueSnapshot, maxTickets);
@@ -1094,7 +1185,9 @@ const server = http.createServer(async (request, response) => {
           integration: "zendesk_csv",
           parsedRows: importResult.parsedRows,
           selectedRows: importResult.selectedRows,
-          droppedRows: importResult.droppedRows
+          droppedRows: importResult.droppedRows,
+          workspaceKey,
+          workspaceCreated: sessionResolution.workspaceCreated
         }
       });
 
@@ -1109,12 +1202,20 @@ const server = http.createServer(async (request, response) => {
           escalationsRecommended: command.tickets.filter((ticket) => ticket.escalateNow).length,
           ingestionMode: "zendesk_csv",
           parsedRows: importResult.parsedRows,
-          selectedRows: importResult.selectedRows
+          selectedRows: importResult.selectedRows,
+          workspaceKey,
+          workspaceCreated: sessionResolution.workspaceCreated
         }
       });
 
+      const publicBaseUrl = inferPublicBaseUrl(request);
+
       sendJson(response, 200, {
         ...buildDailyCommandResponse(command, workspaceInput),
+        sessionId,
+        workspaceKey,
+        workspaceAutoCreated: sessionResolution.workspaceCreated,
+        workspaceCheckoutUrl: sessionId ? `${publicBaseUrl}/?sessionId=${sessionId}` : null,
         importSummary: {
           integration: "zendesk_csv",
           parsedRows: importResult.parsedRows,

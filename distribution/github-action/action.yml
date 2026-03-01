@@ -56,6 +56,9 @@ inputs:
     description: Number of tickets to include (1-8).
     required: false
     default: "4"
+  workspace_key:
+    description: Stable workspace key used to auto-resume recurring team sessions.
+    required: false
   source:
     description: Event source label for attribution.
     required: false
@@ -82,6 +85,10 @@ outputs:
     description: Suggested owner for the top ticket.
   csv_source:
     description: Source of CSV data used in this run (workspace_file or bundled_sample).
+  session_id:
+    description: Workspace session id created or resumed for this run.
+  workspace_key:
+    description: Stable workspace key used for session resume.
 runs:
   using: node20
   main: index.js
