@@ -1,0 +1,5 @@
+id,subject,priority,sla_remaining_minutes,assignee_name,via,tier,tags
+81231,"Billing API timeout after deploy",urgent,14,tier-2-billing,api,enterprise,"billing,outage,contract"
+81277,"Refund thread escalated twice",high,28,tier-1-chat,chat,priority,"refund,escalation"
+81310,"Integration webhook retries failing",normal,65,tier-2-support,email,standard,"integration,webhook"
+81344,"SSO login loops for enterprise admins",urgent,11,duty-manager,email,enterprise,"sso,auth,vip"
