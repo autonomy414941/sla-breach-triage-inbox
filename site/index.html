@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SLA Breach Triage Inbox</title>
+    <meta
+      name="description"
+      content="Build an SLA triage workspace, triage tickets with LLM guidance, and run recurring breach-prevention operations with one team subscription."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="hero card">
+        <p class="eyebrow">Support Ops Workflow</p>
+        <h1>SLA Breach Triage Inbox</h1>
+        <p>
+          Create one triage workspace, classify risky tickets before breach, and keep escalation decisions consistent across every shift.
+          Activate recurring export and workspace continuity for <strong>$9/month</strong>.
+        </p>
+        <ul class="hero-points">
+          <li>No signup required for the trial workspace.</li>
+          <li>No credit card required before activation.</li>
+          <li>Generate first triage decision in under 60 seconds.</li>
+        </ul>
+        <form id="quickstart-form" class="quickstart-form">
+          <button id="quickstart-btn" type="submit">Run Quickstart Command + Workspace</button>
+        </form>
+        <p class="tiny">Runs a sample at-risk command, then opens a trial workspace automatically. Advanced setup is optional and available below.</p>
+        <p id="quickstart-status" class="status"></p>
+        <div class="hero-actions">
+          <button id="instant-demo-btn" type="button">Run 60-second Guided Demo</button>
+          <p class="tiny">Creates a sample workspace and one triage decision in a single click.</p>
+        </div>
+        <p id="demo-status" class="status"></p>
+      </section>
+
+      <section class="card">
+        <h2>1. At-Risk Action Board (Start Here)</h2>
+        <p>
+          Paste your current queue snapshot and get an immediate board with priority counts, owner checkpoints, and the next sweep target.
+        </p>
+        <div class="hero-actions">
+          <button id="daily-command-sample-btn" type="button">Run Sample Queue Command</button>
+          <p class="tiny">No typing required. Loads realistic queue data so you can see output immediately. First interaction can auto-run this path unless disabled with <code>?autorun=0</code>.</p>
+        </div>
+
+        <details class="advanced-details">
+          <summary>Import Zendesk CSV (integration-first path)</summary>
+          <p class="tiny">
+            Paste a CSV export from your Zendesk view and run the command without rewriting tickets into manual text format.
+          </p>
+          <form id="zendesk-import-form" class="form-grid">
+            <label class="full">
+              Zendesk CSV export
+              <textarea
+                name="csvData"
+                rows="7"
+                required
+                maxlength="180000"
+                placeholder="id,subject,priority,sla_remaining_minutes,assignee_name,via
+81231,&quot;Billing API timeout after deploy&quot;,urgent,14,tier-2-billing,api
+81277,&quot;Refund thread escalated twice&quot;,high,28,tier-1-chat,chat"
+              ></textarea>
+            </label>
+
+            <label>
+              Team name
+              <input name="teamName" maxlength="120" value="Support Ops Team" />
+            </label>
+
+            <label>
+              Primary queue
+              <input name="primaryQueue" maxlength="100" value="billing-escalations" />
+            </label>
+
+            <label>
+              SLA target (minutes)
+              <input type="number" name="slaTargetMinutes" min="5" max="240" value="45" />
+            </label>
+
+            <label>
+              Max tickets
+              <input type="number" name="maxTickets" min="1" max="8" value="4" />
+            </label>
+
+            <button id="zendesk-import-btn" type="submit">Import CSV + Run Daily Command</button>
+          </form>
+          <p id="zendesk-import-status" class="status"></p>
+        </details>
+
+        <form id="daily-command-form" class="form-grid">
+          <label class="full">
+            Queue snapshot (one ticket per line)
+            <textarea
+              name="queueSnapshot"
+              rows="7"
+              required
+              maxlength="9000"
+              placeholder="ZD-81231 | enterprise | 14m to breach | owner=tier-2-billing | Billing API timeout after deploy
+ZD-81277 | priority | 28m to breach | owner=tier-1-chat | Refund thread escalated twice
+ZD-81310 | standard | 65m to breach | owner=tier-2-support | Integration webhook retries failing"
+            ></textarea>
+          </label>
+
+          <label>
+            Primary queue
+            <input name="primaryQueue" maxlength="100" value="billing-escalations" />
+          </label>
+
+          <label>
+            SLA target (minutes)
+            <input type="number" name="slaTargetMinutes" min="5" max="240" value="45" />
+          </label>
+
+          <label>
+            Team name
+            <input name="teamName" maxlength="120" value="Support Ops Team" />
+          </label>
+
+          <label>
+            Max tickets
+            <input type="number" name="maxTickets" min="1" max="8" value="4" />
+          </label>
+
+          <button id="daily-command-btn" type="submit">Run Daily Command</button>
+        </form>
+        <p id="daily-command-status" class="status"></p>
+
+        <article id="daily-command-output" class="decision hidden">
+          <h3>At-Risk Action Board</h3>
+          <p id="daily-command-headline"></p>
+          <p id="daily-command-summary"></p>
+          <div class="board-kpis">
+            <article class="board-kpi">
+              <p class="tiny">Critical Tickets</p>
+              <p id="board-critical-count" class="board-kpi-value">0</p>
+            </article>
+            <article class="board-kpi">
+              <p class="tiny">Escalate Now</p>
+              <p id="board-escalation-count" class="board-kpi-value">0</p>
+            </article>
+            <article class="board-kpi">
+              <p class="tiny">Next Sweep (min)</p>
+              <p id="board-sweep-minutes" class="board-kpi-value">15</p>
+            </article>
+          </div>
+          <h3>Owner Checkpoints</h3>
+          <ul id="daily-command-owner-checkpoints"></ul>
+          <h3>Immediate Actions</h3>
+          <ul id="daily-command-actions"></ul>
+          <h3>Priority Queue</h3>
+          <ul id="daily-command-tickets"></ul>
+        </article>
+
+        <div class="hero-actions">
+          <button id="command-workspace-btn" type="button" disabled>Open Workspace From Command</button>
+          <p class="tiny">Optional: continue into persistent workspace for recurring history, billing, and export.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2. Optional Advanced Workspace Setup</h2>
+        <p class="tiny">Most teams should start with quickstart above. Open this section only if you need custom queue settings.</p>
+        <details class="advanced-details">
+          <summary>Open advanced setup form</summary>
+          <form id="workspace-form" class="form-grid">
+            <label>
+              Team name
+              <input name="teamName" required maxlength="120" placeholder="Customer Support Core" />
+            </label>
+
+            <label>
+              Helpdesk platform
+              <input name="helpdeskPlatform" required maxlength="80" placeholder="Zendesk" />
+            </label>
+
+            <label>
+              Primary queue
+              <input name="primaryQueue" required maxlength="100" placeholder="billing-escalations" />
+            </label>
+
+            <label>
+              SLA target (minutes)
+              <input type="number" name="slaTargetMinutes" min="5" max="240" value="45" required />
+            </label>
+
+            <label>
+              Monthly ticket volume
+              <input type="number" name="monthlyTicketVolume" min="1" max="500000" value="4200" required />
+            </label>
+
+            <label>
+              Current breach rate (%)
+              <input type="number" name="breachRatePercent" min="0" max="100" step="0.1" value="8.5" required />
+            </label>
+
+            <label>
+              Team timezone
+              <input name="timezone" maxlength="80" value="UTC" />
+            </label>
+
+            <label>
+              Escalation coverage
+              <input name="escalationCoverage" required maxlength="160" placeholder="24/7 follow-the-sun" />
+            </label>
+
+            <label class="full">
+              High-value customer definition
+              <input name="highValueDefinition" required maxlength="180" placeholder="Enterprise contracts or ARR > $10k" />
+            </label>
+
+            <button id="workspace-btn" type="submit">Generate Custom SLA Blueprint</button>
+          </form>
+        </details>
+        <p id="workspace-status" class="status"></p>
+      </section>
+
+      <section id="blueprint-section" class="card hidden">
+        <h2>3. Workspace Blueprint</h2>
+        <p id="blueprint-summary"></p>
+
+        <h3>Priority Matrix</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Priority</th>
+                <th>Trigger</th>
+                <th>Target (min)</th>
+                <th>Escalation</th>
+              </tr>
+            </thead>
+            <tbody id="matrix-body"></tbody>
+          </table>
+        </div>
+
+        <h3>Routing Rules</h3>
+        <ul id="routing-list"></ul>
+
+        <h3>Breach Watch Signals</h3>
+        <ul id="signals-list"></ul>
+      </section>
+
+      <section id="triage-section" class="card hidden">
+        <h2>4. Triage Incoming Tickets</h2>
+        <form id="ticket-form" class="form-grid">
+          <label>
+            Ticket ID
+            <input name="ticketId" required maxlength="120" placeholder="ZD-12831" />
+          </label>
+
+          <label>
+            Channel
+            <select name="channel">
+              <option value="email">Email</option>
+              <option value="chat">Chat</option>
+              <option value="phone">Phone</option>
+              <option value="api">API</option>
+            </select>
+          </label>
+
+          <label>
+            Subject
+            <input name="subject" required maxlength="220" placeholder="Enterprise billing sync failed" />
+          </label>
+
+          <label>
+            Customer tier
+            <select name="customerTier">
+              <option value="standard">Standard</option>
+              <option value="priority">Priority</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
+          </label>
+
+          <label>
+            Minutes until SLA breach
+            <input type="number" name="minutesUntilBreach" min="-1440" max="10080" value="20" required />
+          </label>
+
+          <label>
+            Backlog age (minutes)
+            <input type="number" name="backlogAgeMinutes" min="0" max="10080" value="180" required />
+          </label>
+
+          <label>
+            Current owner
+            <input name="currentOwner" required maxlength="120" placeholder="tier-2-billing" />
+          </label>
+
+          <label class="full">
+            Ticket summary
+            <textarea name="summary" rows="4" required maxlength="2200" placeholder="What happened, what has been tried, and customer impact"></textarea>
+          </label>
+
+          <button id="triage-btn" type="submit">Run Ticket Triage</button>
+        </form>
+
+        <p id="triage-status" class="status"></p>
+
+        <article id="decision-card" class="decision hidden">
+          <h3>Latest Triage Decision</h3>
+          <p id="decision-headline"></p>
+          <p id="decision-reason"></p>
+          <p><strong>Owner:</strong> <span id="decision-owner"></span></p>
+          <p><strong>First response:</strong> <span id="decision-response"></span></p>
+          <p><strong>Escalation message:</strong> <span id="decision-escalation"></span></p>
+          <ul id="decision-actions"></ul>
+        </article>
+      </section>
+
+      <section id="payment-section" class="card hidden">
+        <h2>5. Activate Subscription & Export</h2>
+        <p>Checkout activates recurring workspace access beyond trial and unlocks export.</p>
+        <button id="checkout-btn" type="button">Open Checkout</button>
+
+        <form id="proof-form" class="form-grid proof">
+          <label>
+            Payer email
+            <input name="payerEmail" required maxlength="160" placeholder="ops@example.com" />
+          </label>
+          <label>
+            Transaction ID
+            <input name="transactionId" required maxlength="120" placeholder="pi_... / receipt id" />
+          </label>
+          <label class="full">
+            Evidence URL (optional)
+            <input name="evidenceUrl" maxlength="400" placeholder="https://..." />
+          </label>
+          <label class="full">
+            Note (optional)
+            <textarea name="note" rows="3" maxlength="600" placeholder="Anything we should know"></textarea>
+          </label>
+          <button id="proof-btn" type="submit">Submit Payment Proof</button>
+        </form>
+
+        <button id="export-btn" type="button" disabled>Export Triage Packet</button>
+        <button id="digest-btn" type="button" disabled>Generate Daily Digest</button>
+        <p id="payment-status" class="status"></p>
+        <article id="digest-output" class="decision hidden">
+          <h3>Daily Leadership Digest</h3>
+          <p id="digest-headline"></p>
+          <p id="digest-summary"></p>
+          <h3>Top Risks</h3>
+          <ul id="digest-risks"></ul>
+          <h3>Owner Follow-ups</h3>
+          <ul id="digest-followups"></ul>
+          <h3>Next Shift Plan</h3>
+          <ul id="digest-next-shift"></ul>
+        </article>
+      </section>
+
+      <section id="export-section" class="card hidden">
+        <h2>6. Export</h2>
+        <pre id="export-content"></pre>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,81 @@
+name: SLA Breach Triage Command
+description: Generate a daily SLA triage command from Zendesk CSV using the hosted SLA Breach Triage Inbox API.
+author: autonomy414941
+branding:
+  icon: alert-triangle
+  color: red
+inputs:
+  zendesk_csv_path:
+    description: Path to a Zendesk CSV export file.
+    required: true
+  api_base_url:
+    description: Base URL of the hosted SLA Breach Triage Inbox API.
+    required: false
+    default: https://sla-breach-triage.devtoolbox.dedyn.io
+  team_name:
+    description: Team label passed to the workspace profile.
+    required: false
+    default: Support Ops Team
+  helpdesk_platform:
+    description: Helpdesk platform name.
+    required: false
+    default: Zendesk
+  primary_queue:
+    description: Queue name used for triage context.
+    required: false
+    default: billing-escalations
+  sla_target_minutes:
+    description: SLA target in minutes.
+    required: false
+    default: "45"
+  monthly_ticket_volume:
+    description: Monthly ticket volume estimate.
+    required: false
+    default: "4200"
+  breach_rate_percent:
+    description: Breach rate percentage estimate.
+    required: false
+    default: "8.5"
+  timezone:
+    description: Timezone used for scheduling context.
+    required: false
+    default: UTC
+  escalation_coverage:
+    description: Escalation coverage model.
+    required: false
+    default: 24/7 follow-the-sun with duty-manager escalation
+  high_value_definition:
+    description: Definition of high-value customers.
+    required: false
+    default: Enterprise and contract-backed SLA accounts
+  max_tickets:
+    description: Number of tickets to include (1-8).
+    required: false
+    default: "4"
+  source:
+    description: Event source label for attribution.
+    required: false
+    default: github_action
+  self_test:
+    description: Mark this run as self-test telemetry.
+    required: false
+    default: "false"
+  fail_on_p0:
+    description: Fail the job if any recommended ticket is P0.
+    required: false
+    default: "true"
+  output_markdown_path:
+    description: Optional file path to save a markdown report artifact.
+    required: false
+outputs:
+  highest_priority:
+    description: Highest recommended priority in this run (P0-P3 or none).
+  escalation_count:
+    description: Number of tickets flagged for immediate escalation.
+  recommended_ticket_id:
+    description: Top recommended ticket id.
+  recommended_owner:
+    description: Suggested owner for the top ticket.
+runs:
+  using: node20
+  main: index.js

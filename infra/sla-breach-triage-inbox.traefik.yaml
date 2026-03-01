@@ -1,0 +1,25 @@
+http:
+  routers:
+    sla-breach-triage-inbox-http:
+      entryPoints:
+        - http
+      rule: "Host(`sla-breach-triage.devtoolbox.dedyn.io`)"
+      service: sla-breach-triage-inbox
+      priority: 1200
+
+    sla-breach-triage-inbox-https:
+      entryPoints:
+        - https
+      rule: "Host(`sla-breach-triage.devtoolbox.dedyn.io`)"
+      service: sla-breach-triage-inbox
+      priority: 1200
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: "sla-breach-triage.devtoolbox.dedyn.io"
+
+  services:
+    sla-breach-triage-inbox:
+      loadBalancer:
+        servers:
+          - url: "http://sla-breach-triage-inbox:8080"
