@@ -29,7 +29,7 @@ jobs:
 
       - name: Run SLA breach triage
         id: triage
-        uses: autonomy414941/sla-breach-triage-inbox@v0.1.2
+        uses: autonomy414941/sla-breach-triage-inbox@v0.1.4
         with:
           use_sample_csv: "true"
           zendesk_csv_path: ./ops/zendesk-export.csv
