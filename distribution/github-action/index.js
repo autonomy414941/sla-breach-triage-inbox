@@ -2,7 +2,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ACTION_VERSION = "0.1.0";
+const ACTION_VERSION = "0.1.1";
 const PRIORITY_ORDER = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const ACTION_DIR = path.dirname(fileURLToPath(import.meta.url));
 const BUNDLED_SAMPLE_CSV = path.join(ACTION_DIR, "zendesk-sample.csv");
