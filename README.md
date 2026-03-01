@@ -1,7 +1,13 @@
 # SLA Breach Triage Inbox
 
-SLA Breach Triage Inbox is a GitHub Action plus hosted API for recurring support-operations triage.
-It converts Zendesk CSV exports into a shift-ready action board with priority, escalation, and owner checkpoints.
+SLA Breach Triage Inbox is a GitHub Action plus hosted API for recurring Zendesk SLA breach triage.
+It turns queue exports into shift-ready escalation actions with priority, owner routing, and handoff checkpoints.
+
+## Why teams run this action
+
+- Convert raw Zendesk exports into a prioritized command brief every shift.
+- Keep escalation ownership consistent with a stable `workspace_key`.
+- Run on schedule in GitHub Actions and export markdown evidence artifacts.
 
 ## Quickstart
 

@@ -1,5 +1,5 @@
 name: SLA Breach Triage Command
-description: Generate a daily SLA triage command from Zendesk CSV using the hosted SLA Breach Triage Inbox API.
+description: GitHub Action for Zendesk SLA breach triage, escalation routing, and support queue handoff reports.
 author: autonomy414941
 branding:
   icon: alert-triangle
