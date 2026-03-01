@@ -79,6 +79,45 @@ body {
   min-width: min(100%, 21rem);
 }
 
+.distribution-links {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.cta-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.85rem;
+  text-decoration: none;
+  transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.cta-link:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  transform: translateY(-1px);
+}
+
+.cta-link-secondary {
+  background: #fff;
+  color: var(--accent-strong);
+  border-color: var(--line);
+}
+
+.cta-link-secondary:hover {
+  background: #f3f8fb;
+  border-color: var(--accent);
+}
+
 .eyebrow {
   margin: 0;
   font-family: "JetBrains Mono", monospace;
@@ -343,6 +382,14 @@ pre {
   }
 
   .quickstart-form button {
+    width: 100%;
+  }
+
+  .distribution-links {
+    align-items: stretch;
+  }
+
+  .cta-link {
     width: 100%;
   }
 }

@@ -25,6 +25,9 @@ const digestBtn = document.querySelector("#digest-btn");
 const commandWorkspaceBtn = document.querySelector("#command-workspace-btn");
 const instantDemoBtn = document.querySelector("#instant-demo-btn");
 const advancedDetails = document.querySelector(".advanced-details");
+const githubActionInstallLink = document.querySelector("#github-action-install-link");
+const githubWorkflowExampleLink = document.querySelector("#github-workflow-example-link");
+const githubReleaseLink = document.querySelector("#github-release-link");
 
 const blueprintSection = document.querySelector("#blueprint-section");
 const triageSection = document.querySelector("#triage-section");
@@ -309,6 +312,18 @@ async function trackLandingInteractive(trigger = "unknown") {
   } catch {
     // Ignore telemetry failures so onboarding remains responsive.
   }
+}
+
+function registerTrackedOutboundLink(link, action, placement) {
+  if (!link) {
+    return;
+  }
+  link.addEventListener("click", () => {
+    void trackLandingInteractive(`outbound_${action}`);
+    void trackOnboardingAction(action, {
+      placement
+    });
+  });
 }
 
 function registerInteractiveTracking(onFirstInteraction = null) {
@@ -1384,6 +1399,10 @@ if (instantDemoBtn) {
     void runInstantDemo("manual");
   });
 }
+
+registerTrackedOutboundLink(githubActionInstallLink, "github_action_install_click", "hero");
+registerTrackedOutboundLink(githubWorkflowExampleLink, "github_action_workflow_example_click", "hero");
+registerTrackedOutboundLink(githubReleaseLink, "github_action_release_click", "hero");
 
 if (instant) {
   void runInstantDemo("auto");
