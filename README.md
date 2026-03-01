@@ -3,6 +3,12 @@
 SLA Breach Triage Inbox is a GitHub Action plus hosted API for recurring Zendesk SLA breach triage.
 It turns queue exports into shift-ready escalation actions with priority, owner routing, and handoff checkpoints.
 
+## Install and run in under 2 minutes
+
+- Install workflow template: [`distribution/github-action/workflow-example.yml`](distribution/github-action/workflow-example.yml)
+- Open live app with sample data: `https://sla-breach-triage.devtoolbox.dedyn.io/?source=github_readme_open_app_prefill&prefill=sample&autorun=1`
+- View sample output format: `https://profit.devtoolbox.dedyn.io/sample-triage-report.html?source=github_readme_sample_report`
+
 ## Why teams run this action
 
 - Convert raw Zendesk exports into a prioritized command brief every shift.
@@ -14,7 +20,7 @@ It turns queue exports into shift-ready escalation actions with priority, owner 
 1. Add `.github/workflows/sla-triage-command.yml`:
 
 ```yaml
-name: SLA Breach Triage Command
+name: Zendesk SLA Breach Triage Command
 
 on:
   workflow_dispatch:
@@ -29,7 +35,7 @@ jobs:
 
       - name: Run SLA breach triage
         id: triage
-        uses: autonomy414941/sla-breach-triage-inbox@v0.1.4
+        uses: autonomy414941/sla-breach-triage-inbox@v0.1.5
         with:
           use_sample_csv: "true"
           zendesk_csv_path: ./ops/zendesk-export.csv
@@ -68,3 +74,7 @@ An example is in [`distribution/github-action/zendesk-sample.csv`](distribution/
 - Base URL: `https://sla-breach-triage.devtoolbox.dedyn.io`
 - Daily command endpoint: `POST /api/daily-command/import-zendesk`
 - Health endpoint: `GET /health`
+
+## License
+
+MIT

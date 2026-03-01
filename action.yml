@@ -1,5 +1,5 @@
-name: SLA Breach Triage Command
-description: GitHub Action for Zendesk SLA breach triage, escalation routing, and support queue handoff reports.
+name: Zendesk SLA Breach Triage Command
+description: GitHub Action for Zendesk SLA breach triage, escalation routing, and recurring support queue handoff reports.
 author: autonomy414941
 branding:
   icon: alert-triangle

@@ -2,7 +2,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ACTION_VERSION = "0.1.4";
+const ACTION_VERSION = "0.1.5";
 const PRIORITY_ORDER = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const ACTION_DIR = path.dirname(fileURLToPath(import.meta.url));
 const BUNDLED_SAMPLE_CSV = path.join(ACTION_DIR, "zendesk-sample.csv");
@@ -179,7 +179,7 @@ function buildSummary(result, metadata) {
   const highest = highestPriority(result.tickets);
   const escalationCount = result.tickets.filter((ticket) => ticket.escalateNow).length;
   const lines = [
-    "## SLA Breach Triage Command",
+    "## Zendesk SLA Breach Triage Command",
     "",
     `- Headline: ${oneLine(result.shiftHeadline || "n/a")}`,
     `- Queue summary: ${oneLine(result.queueSummary || "n/a")}`,
