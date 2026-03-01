@@ -5,8 +5,7 @@ It converts Zendesk CSV exports into a shift-ready action board with priority, e
 
 ## Quickstart
 
-1. Commit your Zendesk export to the repo (example: `ops/zendesk-export.csv`).
-2. Add `.github/workflows/sla-triage-command.yml`:
+1. Add `.github/workflows/sla-triage-command.yml`:
 
 ```yaml
 name: SLA Breach Triage Command
@@ -26,6 +25,7 @@ jobs:
         id: triage
         uses: autonomy414941/sla-breach-triage-inbox@v0.1.0
         with:
+          use_sample_csv: "true"
           zendesk_csv_path: ./ops/zendesk-export.csv
           source: github_action
           self_test: "false"
@@ -38,8 +38,9 @@ jobs:
           path: ./ops/sla-triage-report.md
 ```
 
-3. Run the workflow from the Actions tab.
-4. Review the generated step summary and `sla-triage-report` artifact.
+2. Run the workflow from the Actions tab. If `./ops/zendesk-export.csv` does not exist, the action uses a bundled sample CSV for first-run validation.
+3. Review the generated step summary and `sla-triage-report` artifact.
+4. Replace sample mode with your own Zendesk export (`ops/zendesk-export.csv`) and set `use_sample_csv: "false"` for production runs.
 
 See [`distribution/github-action/workflow-example.yml`](distribution/github-action/workflow-example.yml) for the same template.
 
@@ -59,4 +60,3 @@ An example is in [`distribution/github-action/zendesk-sample.csv`](distribution/
 - Base URL: `https://sla-breach-triage.devtoolbox.dedyn.io`
 - Daily command endpoint: `POST /api/daily-command/import-zendesk`
 - Health endpoint: `GET /health`
-

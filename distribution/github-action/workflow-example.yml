@@ -14,6 +14,8 @@ jobs:
       - name: Run SLA breach triage
         uses: autonomy414941/sla-breach-triage-inbox@v0.1.0
         with:
+          # Optional for first run: if file is missing, bundled sample CSV is used.
+          use_sample_csv: "true"
           zendesk_csv_path: ./ops/zendesk-export.csv
           source: github_action
           self_test: "false"

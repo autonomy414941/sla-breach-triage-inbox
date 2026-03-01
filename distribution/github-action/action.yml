@@ -6,8 +6,12 @@ branding:
   color: red
 inputs:
   zendesk_csv_path:
-    description: Path to a Zendesk CSV export file.
-    required: true
+    description: Path to a Zendesk CSV export file. Optional when use_sample_csv is true.
+    required: false
+  use_sample_csv:
+    description: Use bundled sample CSV when zendesk_csv_path is missing or not found.
+    required: false
+    default: "false"
   api_base_url:
     description: Base URL of the hosted SLA Breach Triage Inbox API.
     required: false
@@ -76,6 +80,8 @@ outputs:
     description: Top recommended ticket id.
   recommended_owner:
     description: Suggested owner for the top ticket.
+  csv_source:
+    description: Source of CSV data used in this run (workspace_file or bundled_sample).
 runs:
   using: node20
   main: index.js
