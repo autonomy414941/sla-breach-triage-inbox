@@ -41,6 +41,21 @@ curl -fsS -X POST "$BASE_URL/api/events/landing-interactive" \
   -H 'content-type: application/json' \
   --data '{"source":"smoke","selfTest":true,"path":"/"}' >/dev/null
 
+github_import_payload="$(curl -fsS -X POST "$BASE_URL/api/daily-command/import-github-issues" \
+  -H 'content-type: application/json' \
+  --data '{"teamName":"Self Test Support","helpdeskPlatform":"GitHub Issues","primaryQueue":"repo-issues","slaTargetMinutes":45,"monthlyTicketVolume":5200,"breachRatePercent":9.4,"timezone":"UTC","escalationCoverage":"24/7 follow-the-sun","highValueDefinition":"Enterprise ARR > 10k","maxTickets":4,"workspaceKey":"smoke-github-repo-issues","source":"smoke","selfTest":true,"githubIssuesJson":"[{\"number\":8801,\"title\":\"P0 enterprise outage after deploy\",\"labels\":[{\"name\":\"p0\"},{\"name\":\"enterprise\"}],\"assignees\":[{\"login\":\"ops-oncall\"}],\"created_at\":\"2026-03-01T23:20:00.000Z\"},{\"number\":8802,\"title\":\"Priority refund escalation\",\"labels\":[{\"name\":\"priority\"},{\"name\":\"sla:45m\"}],\"assignees\":[{\"login\":\"support-lead\"}],\"created_at\":\"2026-03-01T22:50:00.000Z\"}]"}')"
+
+github_import_integration="$(printf '%s' "$github_import_payload" | jq -r '.importSummary.integration')"
+github_import_selected="$(printf '%s' "$github_import_payload" | jq -r '.importSummary.selectedIssues')"
+if [[ "$github_import_integration" != "github_issues" ]]; then
+  echo "github import failed: $github_import_payload" >&2
+  exit 1
+fi
+if [[ "$github_import_selected" == "null" || "$github_import_selected" -lt 1 ]]; then
+  echo "github import selectedIssues missing: $github_import_payload" >&2
+  exit 1
+fi
+
 daily_command_payload="$(curl -fsS -X POST "$BASE_URL/api/daily-command" \
   -H 'content-type: application/json' \
   --data '{"queueSnapshot":"ZD-81231 | enterprise | 14m to breach | owner=tier-2-billing | Billing API timeout after deploy\nZD-81277 | priority | 28m to breach | owner=tier-1-chat | Refund thread escalated twice\nZD-81310 | standard | 65m to breach | owner=tier-2-support | Integration webhook retries failing","primaryQueue":"billing-escalations","slaTargetMinutes":45,"teamName":"Self Test Support","maxTickets":4,"source":"smoke","selfTest":true}')"
@@ -174,6 +189,8 @@ if [[ "$ticket_triaged" == "null" || "$ticket_triaged" -lt 1 ]]; then
 fi
 
 echo "healthStatus=$status"
+echo "githubImportIntegration=$github_import_integration"
+echo "githubImportSelectedIssues=$github_import_selected"
 echo "sessionId=$session_id"
 echo "priorityRows=$priority_rows"
 echo "triagePriority=$priority"

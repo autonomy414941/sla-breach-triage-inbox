@@ -21,6 +21,7 @@ import {
 } from "./triage.js";
 import { deriveEffectiveSelfTest, isLikelyAutomationUserAgent, normalizeUserAgent } from "./traffic.js";
 import { buildQueueSnapshotFromZendeskCsv } from "./intake.js";
+import { buildQueueSnapshotFromGithubIssuesJson } from "./github-intake.js";
 
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number.parseInt(process.env.PORT || "8080", 10);
@@ -798,9 +799,9 @@ async function createTriageDecision(
 
 function createDemoWorkspaceInput(): SlaWorkspaceInput {
   return {
-    teamName: "Demo Support Ops",
-    helpdeskPlatform: "Zendesk",
-    primaryQueue: "enterprise-escalations",
+    teamName: "Demo GitHub Support Ops",
+    helpdeskPlatform: "GitHub Issues",
+    primaryQueue: "repo-issues",
     slaTargetMinutes: 45,
     monthlyTicketVolume: 2800,
     breachRatePercent: 9.2,
@@ -812,8 +813,8 @@ function createDemoWorkspaceInput(): SlaWorkspaceInput {
 
 function createDemoTicketInput(): TicketTriageInput {
   return {
-    ticketId: "DEMO-1001",
-    subject: "Enterprise billing API timeout after deploy",
+    ticketId: "GH-1001",
+    subject: "P1: Enterprise billing API timeout after deploy",
     summary:
       "Billing jobs stalled for 18 minutes after deploy. Finance close is blocked and three enterprise accounts are waiting for invoices.",
     customerTier: "enterprise",
@@ -834,8 +835,8 @@ async function warmQuickstartBlueprintCache(): Promise<void> {
 
 function buildQuickstartWorkspaceInput(payload: JsonObject): SlaWorkspaceInput {
   const teamName = asOptionalString(payload, "teamName", 120) || "Support Ops Team";
-  const helpdeskPlatform = asOptionalString(payload, "helpdeskPlatform", 80) || "Zendesk";
-  const primaryQueue = asOptionalString(payload, "primaryQueue", 100) || "billing-escalations";
+  const helpdeskPlatform = asOptionalString(payload, "helpdeskPlatform", 80) || "GitHub Issues";
+  const primaryQueue = asOptionalString(payload, "primaryQueue", 100) || "repo-issues";
   const timezone = asOptionalString(payload, "timezone", 80) || "UTC";
   const escalationCoverage =
     asOptionalString(payload, "escalationCoverage", 160) || "24/7 follow-the-sun with duty-manager escalation";
@@ -907,6 +908,22 @@ function buildDailyCommandCsvImportRequest(payload: JsonObject): {
   return {
     workspaceInput,
     csvData,
+    maxTickets
+  };
+}
+
+function buildDailyCommandGithubImportRequest(payload: JsonObject): {
+  workspaceInput: SlaWorkspaceInput;
+  githubIssuesJson: string;
+  maxTickets: number;
+} {
+  const workspaceInput = buildQuickstartWorkspaceInput(payload);
+  const githubIssuesJson = asRequiredString(payload, "githubIssuesJson", 260000);
+  const maxTickets = parseMaxTickets(payload.maxTickets);
+
+  return {
+    workspaceInput,
+    githubIssuesJson,
     maxTickets
   };
 }
@@ -1243,6 +1260,74 @@ const server = http.createServer(async (request, response) => {
           selectedRows: importResult.selectedRows,
           droppedRows: importResult.droppedRows,
           ticketIds: importResult.ticketIds
+        }
+      });
+      return;
+    }
+
+    if (method === "POST" && pathname === "/api/daily-command/import-github-issues") {
+      const payload = await parseBody(request);
+      const { workspaceInput, githubIssuesJson, maxTickets } = buildDailyCommandGithubImportRequest(payload);
+      const { source, selfTest } = requestTrafficContext(request, payload, "web", false);
+      const requestedSessionId = parseOptionalSessionId(payload);
+      const workspaceKey = parseOptionalWorkspaceKey(payload);
+      const sessionResolution = await resolveWorkspaceFromRequest({
+        workspaceInput,
+        requestedSessionId,
+        workspaceKey,
+        source,
+        selfTest
+      });
+      const sessionId = sessionResolution.sessionId;
+
+      const importResult = buildQueueSnapshotFromGithubIssuesJson(githubIssuesJson, maxTickets);
+      const command = await buildDailyCommand(workspaceInput, importResult.queueSnapshot, maxTickets);
+
+      await recordEvent("integration_ingested", {
+        source,
+        selfTest,
+        sessionId,
+        details: {
+          integration: "github_issues",
+          parsedIssues: importResult.parsedIssues,
+          selectedIssues: importResult.selectedIssues,
+          droppedIssues: importResult.droppedIssues,
+          workspaceKey,
+          workspaceCreated: sessionResolution.workspaceCreated
+        }
+      });
+
+      await recordEvent("daily_command_run", {
+        source,
+        selfTest,
+        sessionId,
+        details: {
+          primaryQueue: workspaceInput.primaryQueue,
+          ticketCount: command.tickets.length,
+          highestPriority: command.tickets[0]?.priority || null,
+          escalationsRecommended: command.tickets.filter((ticket) => ticket.escalateNow).length,
+          ingestionMode: "github_issues",
+          parsedIssues: importResult.parsedIssues,
+          selectedIssues: importResult.selectedIssues,
+          workspaceKey,
+          workspaceCreated: sessionResolution.workspaceCreated
+        }
+      });
+
+      const publicBaseUrl = inferPublicBaseUrl(request);
+
+      sendJson(response, 200, {
+        ...buildDailyCommandResponse(command, workspaceInput),
+        sessionId,
+        workspaceKey,
+        workspaceAutoCreated: sessionResolution.workspaceCreated,
+        workspaceCheckoutUrl: sessionId ? `${publicBaseUrl}/?sessionId=${sessionId}` : null,
+        importSummary: {
+          integration: "github_issues",
+          parsedIssues: importResult.parsedIssues,
+          selectedIssues: importResult.selectedIssues,
+          droppedIssues: importResult.droppedIssues,
+          issueNumbers: importResult.issueNumbers
         }
       });
       return;

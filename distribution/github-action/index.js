@@ -2,10 +2,11 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ACTION_VERSION = "0.1.5";
+const ACTION_VERSION = "0.1.6";
 const PRIORITY_ORDER = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const ACTION_DIR = path.dirname(fileURLToPath(import.meta.url));
 const BUNDLED_SAMPLE_CSV = path.join(ACTION_DIR, "zendesk-sample.csv");
+const BUNDLED_SAMPLE_GITHUB_ISSUES = path.join(ACTION_DIR, "github-issues-sample.json");
 
 function getInput(name, fallback = "") {
   const key = `INPUT_${name.replace(/ /g, "_").toUpperCase()}`;
@@ -54,6 +55,17 @@ function normalizeBaseUrl(value) {
   return normalized.replace(/\/+$/, "");
 }
 
+function parseIngestionMode(value) {
+  const normalized = oneLine(value).toLowerCase();
+  if (!normalized || normalized === "github" || normalized === "github_issues") {
+    return "github_issues";
+  }
+  if (normalized === "zendesk" || normalized === "zendesk_csv") {
+    return "zendesk_csv";
+  }
+  throw new Error("invalid_ingestion_mode");
+}
+
 function sanitizeWorkspaceKey(value) {
   const normalized = oneLine(value)
     .toLowerCase()
@@ -74,8 +86,8 @@ function buildDefaultWorkspaceKey(teamName, primaryQueue) {
   }
 
   const teamPart = sanitizeWorkspaceKey(teamName) || "support-ops-team";
-  const queuePart = sanitizeWorkspaceKey(primaryQueue) || "billing-escalations";
-  return sanitizeWorkspaceKey(`team-${teamPart}-${queuePart}`) || "team-support-ops-billing-escalations";
+  const queuePart = sanitizeWorkspaceKey(primaryQueue) || "repo-issues";
+  return sanitizeWorkspaceKey(`team-${teamPart}-${queuePart}`) || "team-support-ops-repo-issues";
 }
 
 function resolveWorkspaceKey(inputValue, teamName, primaryQueue) {
@@ -93,13 +105,116 @@ function oneLine(value) {
     .trim();
 }
 
+function normalizeToken(value) {
+  return oneLine(value);
+}
+
+function ensureValidIssuesJson(rawJson, invalidCode) {
+  let parsed;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    throw new Error(invalidCode);
+  }
+
+  if (Array.isArray(parsed)) {
+    return rawJson;
+  }
+
+  if (parsed && typeof parsed === "object" && Array.isArray(parsed.items)) {
+    return rawJson;
+  }
+
+  throw new Error(invalidCode);
+}
+
+async function fetchGithubIssuesFromApi(githubToken) {
+  const repository = oneLine(process.env.GITHUB_REPOSITORY || "");
+  if (!/^[^/\s]+\/[^/\s]+$/.test(repository)) {
+    throw new Error("github_repository_missing");
+  }
+
+  const headers = {
+    accept: "application/vnd.github+json",
+    "user-agent": `sla-breach-triage-github-action/${ACTION_VERSION}`,
+    "x-github-api-version": "2022-11-28"
+  };
+
+  const token = normalizeToken(githubToken);
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(
+    `https://api.github.com/repos/${repository}/issues?state=open&sort=updated&direction=desc&per_page=100`,
+    {
+      method: "GET",
+      headers
+    }
+  );
+
+  const bodyText = await response.text();
+  if (!response.ok) {
+    throw new Error(`github_issues_http_${response.status}`);
+  }
+
+  return ensureValidIssuesJson(bodyText, "invalid_github_issues_api_payload");
+}
+
+async function loadGithubIssuesJsonData(githubIssuesJsonPath, useSampleGithubIssues, githubToken) {
+  const trimmedPath = oneLine(githubIssuesJsonPath);
+  if (trimmedPath) {
+    const jsonAbsolutePath = path.resolve(process.cwd(), trimmedPath);
+    try {
+      const githubIssuesJson = await readFile(jsonAbsolutePath, "utf8");
+      return {
+        githubIssuesJson: ensureValidIssuesJson(githubIssuesJson, "invalid_github_issues_json"),
+        inputSource: "workspace_file"
+      };
+    } catch (error) {
+      const code =
+        error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "";
+      if (!(useSampleGithubIssues && code === "ENOENT")) {
+        if (code === "ENOENT") {
+          throw new Error("github_issues_json_not_found");
+        }
+        throw error;
+      }
+      console.warn(`github_issues_json_not_found_using_fallback path=${trimmedPath}`);
+    }
+  }
+
+  try {
+    const githubIssuesJson = await fetchGithubIssuesFromApi(githubToken);
+    return {
+      githubIssuesJson,
+      inputSource: "github_api"
+    };
+  } catch (error) {
+    if (!useSampleGithubIssues) {
+      throw error;
+    }
+    const code =
+      error && typeof error === "object" && "message" in error && typeof error.message === "string"
+        ? error.message
+        : "unknown";
+    console.warn(`github_api_fetch_failed_using_sample reason=${oneLine(code)}`);
+  }
+
+  const githubIssuesJson = await readFile(BUNDLED_SAMPLE_GITHUB_ISSUES, "utf8");
+  return {
+    githubIssuesJson: ensureValidIssuesJson(githubIssuesJson, "invalid_github_issues_sample"),
+    inputSource: "bundled_sample"
+  };
+}
+
 async function loadZendeskCsvData(zendeskCsvPath, useSampleCsv) {
   const trimmedPath = (zendeskCsvPath || "").trim();
   if (trimmedPath) {
     const csvAbsolutePath = path.resolve(process.cwd(), trimmedPath);
     try {
       const csvData = await readFile(csvAbsolutePath, "utf8");
-      return { csvData, csvSource: "workspace_file" };
+      return { csvData, inputSource: "workspace_file" };
     } catch (error) {
       const code =
         error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "";
@@ -116,7 +231,7 @@ async function loadZendeskCsvData(zendeskCsvPath, useSampleCsv) {
   }
 
   const csvData = await readFile(BUNDLED_SAMPLE_CSV, "utf8");
-  return { csvData, csvSource: "bundled_sample" };
+  return { csvData, inputSource: "bundled_sample" };
 }
 
 async function setOutput(name, value) {
@@ -179,7 +294,7 @@ function buildSummary(result, metadata) {
   const highest = highestPriority(result.tickets);
   const escalationCount = result.tickets.filter((ticket) => ticket.escalateNow).length;
   const lines = [
-    "## Zendesk SLA Breach Triage Command",
+    "## GitHub SLA Policy Guard Command",
     "",
     `- Headline: ${oneLine(result.shiftHeadline || "n/a")}`,
     `- Queue summary: ${oneLine(result.queueSummary || "n/a")}`,
@@ -188,7 +303,8 @@ function buildSummary(result, metadata) {
     `- API base URL: ${metadata.apiBaseUrl}`,
     `- Source: ${metadata.source}`,
     `- Workspace key: ${metadata.workspaceKey}`,
-    `- CSV source: ${metadata.csvSource}`,
+    `- Ingestion mode: ${metadata.ingestionMode}`,
+    `- Input source: ${metadata.inputSource}`,
     ""
   ];
 
@@ -218,9 +334,15 @@ function buildSummary(result, metadata) {
   lines.push("### Recommended Tickets");
   lines.push(...toMarkdownTable(result.tickets));
 
-  if (result.importSummary) {
+  if (result.importSummary && result.importSummary.integration === "github_issues") {
     lines.push("");
-    lines.push("### Zendesk Import");
+    lines.push("### GitHub Issues Import");
+    lines.push(`- Parsed issues: ${oneLine(result.importSummary.parsedIssues)}`);
+    lines.push(`- Selected issues: ${oneLine(result.importSummary.selectedIssues)}`);
+    lines.push(`- Dropped issues: ${oneLine(result.importSummary.droppedIssues)}`);
+  } else if (result.importSummary && result.importSummary.integration === "zendesk_csv") {
+    lines.push("");
+    lines.push("### Zendesk CSV Import");
     lines.push(`- Parsed rows: ${oneLine(result.importSummary.parsedRows)}`);
     lines.push(`- Selected rows: ${oneLine(result.importSummary.selectedRows)}`);
     lines.push(`- Dropped rows: ${oneLine(result.importSummary.droppedRows)}`);
@@ -258,16 +380,22 @@ function extractResultBody(rawBody) {
 }
 
 async function main() {
+  const ingestionMode = parseIngestionMode(getInput("ingestion_mode", "github_issues"));
   const zendeskCsvPath = getInput("zendesk_csv_path");
+  const githubIssuesJsonPath = getInput("github_issues_json_path");
   const useSampleCsv = parseBooleanInput(getInput("use_sample_csv", "false"), false);
+  const useSampleGithubIssues = parseBooleanInput(getInput("use_sample_github_issues", "true"), true);
+  const githubToken = getInput("github_token") || process.env.GITHUB_TOKEN || "";
   const apiBaseUrl = normalizeBaseUrl(getInput("api_base_url", "https://sla-breach-triage.devtoolbox.dedyn.io"));
   const source = getInput("source", "github_action") || "github_action";
   const selfTest = parseBooleanInput(getInput("self_test", "false"), false);
   const failOnP0 = parseBooleanInput(getInput("fail_on_p0", "true"), true);
   const maxTickets = parseIntegerInput("max_tickets", getInput("max_tickets", "4"), 1, 8);
   const teamName = getInput("team_name", "Support Ops Team");
-  const helpdeskPlatform = getInput("helpdesk_platform", "Zendesk");
-  const primaryQueue = getInput("primary_queue", "billing-escalations");
+  const defaultHelpdeskPlatform = ingestionMode === "github_issues" ? "GitHub Issues" : "Zendesk";
+  const defaultPrimaryQueue = ingestionMode === "github_issues" ? "repo-issues" : "billing-escalations";
+  const helpdeskPlatform = getInput("helpdesk_platform", defaultHelpdeskPlatform);
+  const primaryQueue = getInput("primary_queue", defaultPrimaryQueue);
   const workspaceKey = resolveWorkspaceKey(getInput("workspace_key"), teamName, primaryQueue);
 
   const payload = {
@@ -297,14 +425,24 @@ async function main() {
     selfTest
   };
 
-  const csvInput = await loadZendeskCsvData(zendeskCsvPath, useSampleCsv);
-  payload.csvData = csvInput.csvData;
+  let endpointPath = "/api/daily-command/import-zendesk";
+  let inputSource = "workspace_file";
+  if (ingestionMode === "github_issues") {
+    endpointPath = "/api/daily-command/import-github-issues";
+    const githubInput = await loadGithubIssuesJsonData(githubIssuesJsonPath, useSampleGithubIssues, githubToken);
+    payload.githubIssuesJson = githubInput.githubIssuesJson;
+    inputSource = githubInput.inputSource;
+  } else {
+    const csvInput = await loadZendeskCsvData(zendeskCsvPath, useSampleCsv);
+    payload.csvData = csvInput.csvData;
+    inputSource = csvInput.inputSource;
+  }
 
-  const response = await fetch(`${apiBaseUrl}/api/daily-command/import-zendesk`, {
+  const response = await fetch(`${apiBaseUrl}${endpointPath}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "accept": "application/json",
+      accept: "application/json",
       "user-agent": `sla-breach-triage-github-action/${ACTION_VERSION}`,
       "x-github-repository": process.env.GITHUB_REPOSITORY || "",
       "x-github-run-id": process.env.GITHUB_RUN_ID || ""
@@ -315,7 +453,7 @@ async function main() {
   let rawBody = null;
   try {
     rawBody = await response.json();
-  } catch (error) {
+  } catch {
     rawBody = null;
   }
 
@@ -325,7 +463,13 @@ async function main() {
   }
 
   const result = extractResultBody(rawBody);
-  const markdown = buildSummary(result, { apiBaseUrl, source, workspaceKey, csvSource: csvInput.csvSource });
+  const markdown = buildSummary(result, {
+    apiBaseUrl,
+    source,
+    workspaceKey,
+    ingestionMode,
+    inputSource
+  });
   const reportPath = getInput("output_markdown_path");
 
   if (reportPath) {
@@ -342,7 +486,9 @@ async function main() {
   await setOutput("escalation_count", escalationCount);
   await setOutput("recommended_ticket_id", recommendedTicketId);
   await setOutput("recommended_owner", recommendedOwner);
-  await setOutput("csv_source", csvInput.csvSource);
+  await setOutput("ingestion_mode", ingestionMode);
+  await setOutput("input_source", inputSource);
+  await setOutput("csv_source", ingestionMode === "zendesk_csv" ? inputSource : "not_used");
   await setOutput("session_id", result.sessionId || "");
   await setOutput("workspace_key", workspaceKey);
 

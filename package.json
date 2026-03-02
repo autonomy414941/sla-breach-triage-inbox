@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "test": "npm run build && node --test dist/**/*.test.js"
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "check:discoverability": "bash distribution/github-action/discoverability-check.sh",
+    "check:marketplace": "bash distribution/github-action/marketplace-check.sh"
   },
   "devDependencies": {
     "@types/node": "^22.13.14",

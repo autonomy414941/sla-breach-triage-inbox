@@ -1,15 +1,29 @@
-name: Zendesk SLA Breach Triage Command
-description: GitHub Action for Zendesk SLA breach triage, escalation routing, and recurring support queue handoff reports.
+name: GitHub SLA Policy Guard Command
+description: GitHub Action for recurring SLA policy triage from GitHub Issues or Zendesk CSV imports.
 author: autonomy414941
 branding:
   icon: alert-triangle
   color: red
 inputs:
+  ingestion_mode:
+    description: Data source mode. Use github_issues (default) for repo issue ingestion or zendesk_csv for legacy CSV imports.
+    required: false
+    default: github_issues
+  github_issues_json_path:
+    description: Optional path to a JSON file with GitHub issue payload (array or search.items format).
+    required: false
+  use_sample_github_issues:
+    description: Use bundled sample GitHub issues when API fetch/file input is unavailable.
+    required: false
+    default: "true"
+  github_token:
+    description: Optional GitHub token for API issue fetch. Defaults to GITHUB_TOKEN env when available.
+    required: false
   zendesk_csv_path:
-    description: Path to a Zendesk CSV export file. Optional when use_sample_csv is true.
+    description: Path to a Zendesk CSV export file (used when ingestion_mode=zendesk_csv).
     required: false
   use_sample_csv:
-    description: Use bundled sample CSV when zendesk_csv_path is missing or not found.
+    description: Use bundled sample CSV when ingestion_mode=zendesk_csv and zendesk_csv_path is missing.
     required: false
     default: "false"
   api_base_url:
@@ -21,13 +35,13 @@ inputs:
     required: false
     default: Support Ops Team
   helpdesk_platform:
-    description: Helpdesk platform name.
+    description: Helpdesk platform name (default depends on ingestion_mode).
     required: false
-    default: Zendesk
+    default: GitHub Issues
   primary_queue:
     description: Queue name used for triage context.
     required: false
-    default: billing-escalations
+    default: repo-issues
   sla_target_minutes:
     description: SLA target in minutes.
     required: false
@@ -84,7 +98,11 @@ outputs:
   recommended_owner:
     description: Suggested owner for the top ticket.
   csv_source:
-    description: Source of CSV data used in this run (workspace_file or bundled_sample).
+    description: Legacy CSV source output (workspace_file, bundled_sample, or not_used).
+  ingestion_mode:
+    description: Effective ingestion mode used for this run.
+  input_source:
+    description: Source of input data used in this run (github_api, workspace_file, or bundled_sample).
   session_id:
     description: Workspace session id created or resumed for this run.
   workspace_key:
